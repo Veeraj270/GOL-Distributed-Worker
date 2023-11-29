@@ -171,7 +171,7 @@ func (r *RemoteWorker) Test(request stubs.Request, response *stubs.Response) (er
 }
 
 func main() {
-	pAddr := flag.String("port", ":8040", "Port to listen on")
+	pAddr := flag.String("port", ":8030", "Port to listen on")
 	flag.Parse()
 
 	listener, _ := net.Listen("tcp", *pAddr)
