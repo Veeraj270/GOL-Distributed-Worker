@@ -11,9 +11,24 @@ import (
 
 var done bool
 
+func createWorldCopy(world [][]uint8) [][]uint8 {
+	worldCopy := make([][]uint8, len(world))
+	for i := range worldCopy {
+		worldCopy[i] = make([]uint8, len(world[i]))
+		copy(worldCopy[i], world[i])
+	}
+	return worldCopy
+}
+
 func parallelCalculateNextState(worldCopy [][]uint8, startY, endY, height, width int) [][]uint8 {
 	fmt.Println("Next State Calculating!")
 	//fmt.Println("--------NextStateCalculating------------")
+	//fmt.Println("------------------------------------------", endY-startY, "--------------------------------------------------")
+	//fmt.Println("Width:", width)
+
+	//fmt.Println("len(worldCopy[0]):", len(worldCopy[0]))
+	//fmt.Println("len(worldCopy):", len(worldCopy))
+
 	worldSection := make([][]uint8, endY-startY)
 	for i := 0; i < (endY - startY); i++ {
 		worldSection[i] = make([]uint8, width)
@@ -21,6 +36,7 @@ func parallelCalculateNextState(worldCopy [][]uint8, startY, endY, height, width
 
 	for j := startY; j < endY; j++ {
 		for i := 0; i < width; i++ {
+			//fmt.Println("j:", j, " i:", i)
 			sum := 0
 			var neighbours [8]uint8
 			top := j - 1
@@ -39,6 +55,11 @@ func parallelCalculateNextState(worldCopy [][]uint8, startY, endY, height, width
 			if right == width {
 				right = 0
 			}
+
+			//fmt.Println("bottom:", bottom, "top:", top, "left:", left, "right:", right)
+			//fmt.Println("len(worldCopy[0]):", len(worldCopy[0]))
+			//fmt.Println("len(worldCopy):", len(worldCopy))
+
 			neighbours[0] = worldCopy[bottom][left]
 			neighbours[1] = worldCopy[bottom][i]
 			neighbours[2] = worldCopy[bottom][right]
@@ -77,12 +98,61 @@ func parallelCalculateNextState(worldCopy [][]uint8, startY, endY, height, width
 	return worldSection
 }
 
+func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 {
+	worldCopy := createWorldCopy(world)
+	height := endY - startY
+	chunkSize := height / threads
+	remainingChunk := height % threads
+	var parallelWorld [][]uint8
+	var bufferedSliceChan = make([]chan [][]uint8, threads)
+
+	for k := 0; k < threads; k++ {
+		if k < threads-remainingChunk {
+			Begin := (k * chunkSize) + startY
+			End := ((k + 1) * chunkSize) + startY
+			fmt.Println("Begin: ", Begin, " End: ", End)
+			bufferedSliceChan[k] = make(chan [][]uint8)
+			go func(worldCopy [][]uint8, StartY int, EndY int, out chan [][]uint8) {
+				out <- parallelCalculateNextState(worldCopy, Begin, End, len(worldCopy), len(worldCopy[0]))
+			}(worldCopy, Begin, End, bufferedSliceChan[k])
+		} else if k == threads-remainingChunk {
+			Begin := (k * chunkSize) + startY
+			End := ((k+1)*chunkSize + 1) + startY
+			fmt.Println("Begin: ", Begin, " End: ", End)
+
+			bufferedSliceChan[k] = make(chan [][]uint8)
+			go func(worldCopy [][]uint8, StartY int, EndY int, out chan [][]uint8) {
+				out <- parallelCalculateNextState(worldCopy, Begin, End, len(worldCopy), len(worldCopy[0]))
+			}(worldCopy, Begin, End, bufferedSliceChan[k])
+		} else if k > threads-remainingChunk {
+			Begin := ((k * chunkSize) + (k - (threads - remainingChunk))) + startY
+			End := ((k+1)*chunkSize + (k + 1 - (threads - remainingChunk))) + startY
+			fmt.Println("Begin: ", Begin, " End: ", End)
+
+			bufferedSliceChan[k] = make(chan [][]uint8)
+			go func(worldCopy [][]uint8, StartY int, EndY int, out chan [][]uint8) {
+				out <- parallelCalculateNextState(worldCopy, Begin, End, len(worldCopy), len(worldCopy[0]))
+			}(worldCopy, Begin, End, bufferedSliceChan[k])
+		}
+	}
+	fmt.Println("Go routines deployed")
+	for i := 0; i < threads; i++ {
+		parallelWorld = append(parallelWorld, <-bufferedSliceChan[i]...)
+	}
+	fmt.Println("Go routines reassembled")
+	worldCopy = parallelWorld
+	world = parallelWorld
+	return world
+}
+
 type RemoteWorker struct{}
 
 func (r *RemoteWorker) CalculateNextState(request stubs.WorkerRequest, response *stubs.WorkerResponse) (err error) {
 	//fmt.Println("Rpc call received!")
 	done = false
-	response.World = parallelCalculateNextState(request.WorldCopy, request.StartY, request.EndY, request.Height, request.Width)
+	//response.World = parallelCalculateNextState(request.WorldCopy, request.StartY, request.EndY, request.Height, request.Width)
+	response.World = processChunk(request.WorldCopy, 1, request.StartY, request.EndY)
+	fmt.Println("Response made")
 	done = true
 	return
 }
