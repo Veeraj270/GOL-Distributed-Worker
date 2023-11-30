@@ -241,7 +241,7 @@ func main() {
 		fmt.Println("Error registering rpc")
 	}
 
-	go func() { rpc.Accept(listener) }()
+	rpc.Accept(listener)
 
 	fmt.Println("Connection accepted")
 
