@@ -198,7 +198,7 @@ func (r *RemoteWorker) CalculateNextState(request stubs.WorkerRequest, response 
 	//fmt.Println("Rpc call received!")
 	done = false
 	//response.World = parallelCalculateNextState(request.WorldCopy, request.StartY, request.EndY, request.Height, request.Width)
-	response.World = processChunk(request.WorldCopy, 1, request.StartY, request.EndY, request.Turns)
+	response.World = processChunk(request.WorldCopy, 16, request.StartY, request.EndY, request.Turns)
 	fmt.Println("Response made")
 	done = true
 	return
