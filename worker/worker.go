@@ -10,6 +10,22 @@ import (
 )
 
 var done bool
+var initialised bool
+
+var toGiveContacted []uint8
+
+var receivedFromContacted []uint8
+
+var toGiveContacter []uint8
+
+var receivedFromContacter []uint8
+
+var lower *rpc.Client
+var err error
+
+var readyForContact bool
+
+var contacted bool
 
 func createWorldCopy(world [][]uint8) [][]uint8 {
 	worldCopy := make([][]uint8, len(world))
@@ -20,8 +36,9 @@ func createWorldCopy(world [][]uint8) [][]uint8 {
 	return worldCopy
 }
 
-func parallelCalculateNextState(worldCopy [][]uint8, startY, endY, height, width int) [][]uint8 {
-	fmt.Println("Next State Calculating!")
+func parallelCalculateNextState(world [][]uint8, startY, endY, height, width int) [][]uint8 {
+	worldCopy := createWorldCopy(world)
+	//fmt.Println("Next State Calculating!")
 	//fmt.Println("--------NextStateCalculating------------")
 	//fmt.Println("------------------------------------------", endY-startY, "--------------------------------------------------")
 	//fmt.Println("Width:", width)
@@ -98,14 +115,30 @@ func parallelCalculateNextState(worldCopy [][]uint8, startY, endY, height, width
 	return worldSection
 }
 
-func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 {
+func processChunk(world [][]uint8, threads int, startY int, endY int, turns int) [][]uint8 {
+
+	if initialised == false {
+		lower, err = rpc.Dial("tcp", "localhost:8070")
+		if err != nil {
+			fmt.Println("Couldn't dial worker")
+
+		}
+		initialised = true
+	}
+
 	worldCopy := createWorldCopy(world)
 	height := endY - startY
 	chunkSize := height / threads
 	remainingChunk := height % threads
-	var parallelWorld [][]uint8
+	fmt.Println("len(world):", len(world))
+	fmt.Println("len(world[0])", len(world[0]))
+	fmt.Printf("endY:%d, startY:%d, height:%d, chunksize:%d\n", endY, startY, height, chunkSize)
 	var bufferedSliceChan = make([]chan [][]uint8, threads)
 
+	//fmt.Println("------------------------Turn:", i, "--------------------------")
+	fmt.Println(len(world), "x", len(world[0]))
+
+	var parallelWorld [][]uint8
 	for k := 0; k < threads; k++ {
 		if k < threads-remainingChunk {
 			Begin := (k * chunkSize) + startY
@@ -135,6 +168,7 @@ func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 
 			}(worldCopy, Begin, End, bufferedSliceChan[k])
 		}
 	}
+
 	fmt.Println("Go routines deployed")
 	for i := 0; i < threads; i++ {
 		parallelWorld = append(parallelWorld, <-bufferedSliceChan[i]...)
@@ -142,16 +176,29 @@ func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 
 	fmt.Println("Go routines reassembled")
 	worldCopy = parallelWorld
 	world = parallelWorld
+
 	return world
 }
 
 type RemoteWorker struct{}
 
+func (r *RemoteWorker) HaloExchange(request stubs.HaloRequest, response *stubs.HaloResponse) (err error) {
+	fmt.Println("for loop escaped")
+
+	for !readyForContact {
+	}
+	readyForContact = false
+	receivedFromContacter = request.Halo
+	response.Halo = toGiveContacter
+	contacted = true //after exchange
+	return
+}
+
 func (r *RemoteWorker) CalculateNextState(request stubs.WorkerRequest, response *stubs.WorkerResponse) (err error) {
 	//fmt.Println("Rpc call received!")
 	done = false
 	//response.World = parallelCalculateNextState(request.WorldCopy, request.StartY, request.EndY, request.Height, request.Width)
-	response.World = processChunk(request.WorldCopy, 16, request.StartY, request.EndY)
+	response.World = processChunk(request.WorldCopy, 1, request.StartY, request.EndY, request.Turns)
 	fmt.Println("Response made")
 	done = true
 	return
@@ -172,20 +219,37 @@ func (r *RemoteWorker) Test(request stubs.Request, response *stubs.Response) (er
 
 func main() {
 	pAddr := flag.String("port", ":8030", "Port to listen on")
+	//pAddr2 := flag.String("top", ":8070", "Port to receive top halo")
 	flag.Parse()
 
+	contacted = false
+	readyForContact = false
+
 	listener, _ := net.Listen("tcp", *pAddr)
-	defer func(listener net.Listener) {
-		err := listener.Close()
-		if err != nil {
-			fmt.Println("Error closing the listener")
-		}
-	}(listener)
+
+	/*
+		defer func(listener net.Listener) {
+			err := listener.Close()
+			if err != nil {
+				fmt.Println("Error closing the listener")
+			}
+		}(listener)
+
+	*/
 	err := rpc.Register(&RemoteWorker{})
 	if err != nil {
 		fmt.Println("Error registering rpc")
 	}
-	rpc.Accept(listener)
+
+	go func() { rpc.Accept(listener) }()
+
 	fmt.Println("Connection accepted")
+
+	defer func(listener net.Listener) {
+		err := listener.Close()
+		if err != nil {
+			fmt.Println("Error closing the listener2")
+		}
+	}(listener)
 
 }
