@@ -110,7 +110,7 @@ func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 
 		if k < threads-remainingChunk {
 			Begin := (k * chunkSize) + startY
 			End := ((k + 1) * chunkSize) + startY
-			fmt.Println("Begin: ", Begin, " End: ", End)
+			//fmt.Println("Begin: ", Begin, " End: ", End)
 			bufferedSliceChan[k] = make(chan [][]uint8)
 			go func(worldCopy [][]uint8, StartY int, EndY int, out chan [][]uint8) {
 				out <- parallelCalculateNextState(worldCopy, Begin, End, len(worldCopy), len(worldCopy[0]))
@@ -118,7 +118,7 @@ func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 
 		} else if k == threads-remainingChunk {
 			Begin := (k * chunkSize) + startY
 			End := ((k+1)*chunkSize + 1) + startY
-			fmt.Println("Begin: ", Begin, " End: ", End)
+			//fmt.Println("Begin: ", Begin, " End: ", End)
 
 			bufferedSliceChan[k] = make(chan [][]uint8)
 			go func(worldCopy [][]uint8, StartY int, EndY int, out chan [][]uint8) {
@@ -127,7 +127,7 @@ func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 
 		} else if k > threads-remainingChunk {
 			Begin := ((k * chunkSize) + (k - (threads - remainingChunk))) + startY
 			End := ((k+1)*chunkSize + (k + 1 - (threads - remainingChunk))) + startY
-			fmt.Println("Begin: ", Begin, " End: ", End)
+			//fmt.Println("Begin: ", Begin, " End: ", End)
 
 			bufferedSliceChan[k] = make(chan [][]uint8)
 			go func(worldCopy [][]uint8, StartY int, EndY int, out chan [][]uint8) {
@@ -135,11 +135,11 @@ func processChunk(world [][]uint8, threads int, startY int, endY int) [][]uint8 
 			}(worldCopy, Begin, End, bufferedSliceChan[k])
 		}
 	}
-	fmt.Println("Go routines deployed")
+	//fmt.Println("Go routines deployed")
 	for i := 0; i < threads; i++ {
 		parallelWorld = append(parallelWorld, <-bufferedSliceChan[i]...)
 	}
-	fmt.Println("Go routines reassembled")
+	//fmt.Println("Go routines reassembled")
 	worldCopy = parallelWorld
 	world = parallelWorld
 	return world
@@ -171,7 +171,7 @@ func (r *RemoteWorker) Test(request stubs.Request, response *stubs.Response) (er
 }
 
 func main() {
-	pAddr := flag.String("port", ":8030", "Port to listen on")
+	pAddr := flag.String("port", ":8040", "Port to listen on")
 	flag.Parse()
 
 	listener, _ := net.Listen("tcp", *pAddr)
