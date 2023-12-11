@@ -158,8 +158,8 @@ func (r *RemoteWorker) CalculateNextState(request stubs.WorkerRequest, response 
 }
 
 func (r *RemoteWorker) Close(request stubs.CloseReq, response *stubs.CloseResp) (err error) {
-	for !done {
-	}
+	//for !done {
+	//}
 	fmt.Println(done)
 	os.Exit(0)
 	return
